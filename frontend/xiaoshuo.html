@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>网文改编大师 — DeepSeek 前端测试（Claude 风格 UI）</title>
+<script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+
+<style>
+/* ---------------- 基础 Reset & 变量 ---------------- */
+:root{
+  --bg:#0b1220;
+  --panel:#0e1724;
+  --muted:#98a2b3;
+  --accent:#7c3aed;
+  --glass: rgba(255,255,255,0.03);
+  --card-shadow: 0 10px 30px rgba(2,6,23,0.7);
+  --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family: "Inter", "PingFang SC", "Noto Sans CJK SC", system-ui, -apple-system, "Segoe UI", Roboto; background: linear-gradient(180deg,#061024 0%, #07102a 100%); color:#e6eef8}
+.app{display:flex;height:100vh;gap:18px;padding:18px;align-items:stretch}
+/* ---------------- 左侧导航（工具） ---------------- */
+.left{
+  width:76px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:var(--radius);padding:12px;box-shadow:var(--card-shadow);
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+.logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#4f46e5);display:flex;align-items:center;justify-content:center;font-weight:700}
+.icon-btn{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+.icon-btn.active{outline:2px solid rgba(124,58,237,0.18)}
+.small{font-size:12px;color:var(--muted)}
+
+/* ---------------- 中间主区（对话/结果） ---------------- */
+.center{flex:1;display:flex;flex-direction:column;gap:12px}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:10px;background:var(--panel);box-shadow:0 6px 20px rgba(0,0,0,0.6)}
+.top-left{display:flex;gap:12px;align-items:center}
+.title{font-size:16px;font-weight:600}
+.controls{display:flex;gap:8px;align-items:center}
+.btn{padding:8px 12px;border-radius:10px;border:none;background:linear-gradient(90deg,var(--accent),#4f46e5);color:white;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+.main{flex:1;display:flex;gap:12px}
+/* 聊天流 */
+.chat-col{flex:1;display:flex;flex-direction:column;gap:12px}
+.chat-window{flex:1;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);padding:16px;border-radius:10px;overflow:auto;border:1px solid rgba(255,255,255,0.02)}
+.message{margin-bottom:12px;display:flex;gap:12px;align-items:flex-start}
+.avatar{width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;font-weight:700}
+.msg-bubble{max-width:78%;padding:12px;border-radius:10px;background:rgba(255,255,255,0.02);line-height:1.6}
+.msg-bubble.user{background:linear-gradient(180deg, rgba(124,58,237,0.12), rgba(79,70,229,0.08));align-self:flex-end;color:#fff}
+.msg-bubble.system{background:transparent;color:var(--muted);font-size:13px}
+
+/* 结果卡片区（五个候选） */
+.variants{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px}
+.variant-card{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;min-height:120px;display:flex;flex-direction:column;gap:8px}
+.variant-card:hover{transform:translateY(-3px);transition:all .18s}
+.variant-card.selected{outline:3px solid rgba(124,58,237,0.18)}
+
+/* ---------------- 右侧参数区（隐私、上传、Key、设置） ---------------- */
+.right{width:380px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:var(--radius);padding:16px;box-shadow:var(--card-shadow);display:flex;flex-direction:column;gap:12px}
+.section{background:transparent;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}
+.input, textarea, select{width:100%;padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);color:inherit}
+textarea{min-height:120px;resize:vertical}
+.kv{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.small-muted{font-size:12px;color:var(--muted)}
+
+/* ---------------- 响应与辅助 ---------------- */
+.footer{font-size:12px;color:var(--muted);padding:6px;text-align:center}
+.progress{height:8px;background:rgba(255,255,255,0.03);border-radius:8px;overflow:hidden}
+.progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#60a5fa);width:0%}
+.copy-btn{padding:6px 8px;border-radius:8px;border:1px dashed rgba(255,255,255,0.05);font-size:12px;background:transparent;cursor:pointer}
+.note{font-size:12px;color:var(--muted);line-height:1.5}
+</style>
+</head>
+<body>
+<div class="app" role="application" aria-label="网文改编界面">
+  <div class="left" aria-hidden="false">
+    <div class="logo">IP</div>
+    <div class="icon-btn active" title="主流程">主</div>
+    <div class="icon-btn" title="历史">历</div>
+    <div class="icon-btn" title="设置">设</div>
+    <div style="flex:1"></div>
+    <div class="small-muted" style="font-size:11px;text-align:center">Demo</div>
+  </div>
+
+  <div class="center">
+    <div class="topbar" role="toolbar" aria-label="主工具栏">
+      <div class="top-left">
+        <div class="title">网文改编大师</div>
+        <div class="small" style="margin-left:12px;color:var(--muted)">流程：上传原文 → 改编五选 → 选择 → 7000字生成</div>
+      </div>
+      <div class="controls">
+        <button class="btn" id="btnExport">导出为 Word 文档</button>
+        <button class="btn ghost" id="btnClearAll">清空</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="chat-col" style="min-width:420px">
+        <div class="chat-window" id="chatWindow" aria-live="polite">
+          <div class="message">
+            <div class="avatar">S</div>
+            <div class="msg-bubble system">欢迎！请在右侧输入您的 API Key 并上传原文开始使用。</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn" id="btnGenerateFive">生成 5 个改编梗概</button>
+          <button class="btn ghost" id="btnGenerate7000">生成约 7000 字短篇</button>
+          <div style="flex:1"></div>
+          <div class="small-muted">进程状态：<span id="status">就绪</span></div>
+        </div>
+
+        <div style="margin-top:10px">
+          <div class="small-muted">五个候选（点击选择）</div>
+          <div class="variants" id="variants"></div>
+        </div>
+      </div>
+
+      <div class="right" role="region" aria-label="上传与设置">
+        <div class="section">
+          <div class="small-muted">API Key & 后端地址</div>
+          <input id="apiKey" class="input" type="text" placeholder="请输入你的 API Key（例：sk-xxxx）" />
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <input id="apiUrl" class="input" type="text" value="http://localhost:3173/api/generate" />
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="small-muted">上传原文（.txt / .docx / .doc）</div>
+          <input id="fileInput" type="file" accept=".txt,.doc,.docx" />
+          <div class="kv" style="margin-top:8px">
+            <div class="small-muted">原文长度：</div><div id="fileInfo" class="small-muted">0 字符</div>
+          </div>
+          <div class="small-muted" style="margin-top:8px">你也可以直接粘贴原文到下面：</div>
+          <textarea id="rawText" placeholder="或者直接把原文粘贴到这里..."></textarea>
+        </div>
+        
+        <div class="section">
+          <div class="small-muted">开发与调试</div>
+           <div class="note" style="margin-top:4px; margin-bottom:8px;">AI 将自由生成五个不同背景的版本，无需指定。</div>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="btn ghost" id="btnPreviewPrompt">开发调试：显示编码提示</button>
+            <button class="copy-btn" id="btnToggleChunk">分段模式：ON</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="small-muted">生成设置</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <select id="modelSelect" class="input">
+              <option value="deepseek-v3.1">deepseek-v3.1</option>
+              <option value="deepseek-v2">deepseek-v2</option>
+            </select>
+            <input id="maxTokens" class="input" type="number" value="4000" />
+          </div>
+          <div class="small-muted" style="margin-top:6px">最多 tokens：单次请求上限，若生成失败请减小或开启“分段模式”。</div>
+        </div>
+
+        <div class="section">
+          <div class="small-muted">历史与导出</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn ghost" id="btnSaveLocal">保存到本地</button>
+            <button class="btn ghost" id="btnLoadLocal">加载本地草稿</button>
+          </div>
+        </div>
+
+        <div style="flex:1"></div>
+        <div class="footer small-muted">前端请求 -> Node.js 后端 -> API</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ------------------ DOM 元件 ------------------ */
+const fileInput = document.getElementById('fileInput');
+const rawText = document.getElementById('rawText');
+const fileInfo = document.getElementById('fileInfo');
+const apiKeyEl = document.getElementById('apiKey');
+const apiUrlEl = document.getElementById('apiUrl');
+const variantsEl = document.getElementById('variants');
+const chatWindow = document.getElementById('chatWindow');
+const statusEl = document.getElementById('status');
+const btnGenerateFive = document.getElementById('btnGenerateFive');
+const btnGenerate7000 = document.getElementById('btnGenerate7000');
+const btnPreviewPrompt = document.getElementById('btnPreviewPrompt');
+const btnToggleChunk = document.getElementById('btnToggleChunk');
+const maxTokensEl = document.getElementById('maxTokens');
+const modelSelect = document.getElementById('modelSelect');
+
+let originalText = '';
+let variants = [];
+let chosenIndex = -1;
+let useChunk = true;
+let finalGeneratedStory = '';
+
+/* ------------------ 内置 prompt（占位） ------------------ */
+function _decodePrompt(){
+  // 在这个前后端分离的架构中，核心prompt可以放在后端，这里只做占位
+  return "You are a creative adaptation assistant.";
+}
+
+/* ------------------ 文件读取 ------------------ */
+fileInput.addEventListener('change', async (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  _appendSystem('正在读取文件 ' + f.name);
+  try {
+    let txt = '';
+    if (f.name.endsWith('.txt')) {
+      txt = await f.text();
+    } else if (f.name.endsWith('.docx')) {
+      const arrayBuffer = await f.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+      txt = result.value;
+    } else {
+        alert('暂不支持的文件格式，请选择 .txt 或 .docx');
+        return;
+    }
+    originalText = txt.trim();
+    rawText.value = originalText;
+    fileInfo.innerText = originalText.length + ' 字符';
+    _appendSystem('文件读取成功，预览已填充到文本框。');
+  } catch(err) {
+      console.error("文件读取失败:", err);
+      _appendSystem('文件读取失败: ' + err.message);
+      alert('读取 ' + f.name + ' 失败，请检查文件是否损坏。');
+  }
+});
+
+rawText.addEventListener('input', (e)=>{
+  originalText = e.target.value || '';
+  fileInfo.innerText = originalText.length + ' 字符';
+});
+
+/* ------------------ UI 帮助函数 ------------------ */
+function _appendSystem(text){
+  const el = document.createElement('div');
+  el.className = 'message';
+  el.innerHTML = `<div class="avatar">S</div><div class="msg-bubble system">${escapeHtml(text)}</div>`;
+  chatWindow.appendChild(el);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+function _appendUser(text){
+  const el = document.createElement('div');
+  el.className = 'message';
+  el.innerHTML = `<div class="avatar">U</div><div class="msg-bubble user">${escapeHtml(text)}</div>`;
+  chatWindow.appendChild(el);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+function escapeHtml(s){ return (s||'').toString().replaceAll('<','&lt;').replaceAll('>','&gt;') }
+
+/* ------------------ API 调用（通过后端代理，并发送用户Key） ------------------ */
+async function callApi(payload){
+  const API_URL = apiUrlEl.value.trim();
+  if(!API_URL) throw new Error('请在右侧确认后端 API Endpoint');
+  
+  const key = apiKeyEl.value.trim();
+  if (!key) {
+    alert('请在右侧输入您的 API Key');
+    throw new Error('API Key is missing.');
+  }
+
+  const bodyForBackend = { ...payload, apiKey: key };
+
+  const res = await fetch(API_URL, {
+    method:'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(bodyForBackend),
+  });
+
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error('后端服务返回错误: ' + res.status + ' / ' + txt);
+  }
+
+  const json = await res.json();
+  if(json.output && json.output.choices && json.output.choices.length){
+    return json.output.choices[0].message?.content || JSON.stringify(json.output);
+  }
+  if(json.choices && json.choices.length){
+    return json.choices[0].message?.content || json.choices[0].text || JSON.stringify(json);
+  }
+  if(json.error) {
+      return `后端错误: ${json.error}. 详情: ${JSON.stringify(json.details)}`;
+  }
+  return JSON.stringify(json);
+}
+
+/* ------------------ 核心业务逻辑 ------------------ */
+btnGenerateFive.addEventListener('click', async ()=>{
+  try{
+    if(!originalText || originalText.trim().length<20){ alert('请先上传或粘贴原文（至少 20 字）'); return; }
+    statusEl.innerText = '请求中：生成 5 个梗概';
+    _appendUser('开始生成 5 个不同背景的改编梗概...');
+    
+    const safeText = originalText.length > 20000 ? originalText.slice(0,20000) : originalText;
+    const finalPrompt = `你是一位顶级的世界观架构师和小说改编家。请基于以下原文，自由发挥想象力，创作出 5 个完全不同风格和世界观背景的改编梗概。\n\n要求：\n1. **多样性**：每个版本的世界观必须有显著区别（例如：一个可以是赛博朋克，一个可以是古典仙侠，一个可以是废土求生，一个可以是星际歌剧，一个可以是克苏鲁神话等）。\n2. **内容结构**：每个版本都必须包含【核心梗概】、【人设提要】和【推销亮点】这三个部分。\n3. **严格格式**：请在每个版本结束后，必须使用“---VARIANT-SEPARATOR---”作为唯一的分隔符，这非常重要。\n\n原文如下：\n'''${safeText}'''`;
+
+    const payload = {
+      model: modelSelect.value,
+      messages: [
+        {role:'system', content: _decodePrompt()},
+        {role:'user', content: finalPrompt}
+      ],
+      max_tokens: parseInt(maxTokensEl.value) || 4000,
+      temperature: 0.85
+    };
+    
+    const resp = await callApi(payload);
+    _appendSystem('已收到候选结果，正在解析...');
+    variants = _splitIntoVariants(resp);
+    
+    if (variants.length < 5) {
+        _appendSystem(`警告：AI 返回的结果不足 5 个版本（实际：${variants.length}个）。`);
+    }
+
+    _renderVariants();
+    statusEl.innerText = '就绪：已获得 ' + variants.length + ' 个版本';
+  }catch(e){
+    console.error(e);
+    alert('生成五选出错：' + e.message);
+    statusEl.innerText = '错误';
+    _appendSystem('出错：' + e.message);
+  }
+});
+
+btnGenerate7000.addEventListener('click', async ()=>{
+  try{
+    if(chosenIndex < 0 || !variants[chosenIndex]){ alert('请先选择一个改编版本'); return; }
+    statusEl.innerText = '生成中：准备章节提纲...';
+    _appendUser('开始根据已选梗概生成约 7000 字短篇...');
+    const chosenText = variants[chosenIndex];
+    
+    const chapPrompt = `基于下面的改编梗概，生成一个 6 到 8 章的详细章节提纲。要求：每章 1-3 句总结，说明该章的主要冲突与情感转折。改编梗概如下：\n${chosenText}\n只输出章节标题与一句话总结，编号列出。`;
+    const payload1 = {
+      model: modelSelect.value,
+      messages: [{role:'system', content:'You are an expert fiction outline writer.'},{role:'user', content: chapPrompt}],
+      max_tokens: 800,
+      temperature:0.7
+    };
+    const outlineResp = await callApi(payload1);
+    _appendSystem('已生成章节提纲...');
+    
+    const chapters = _parseChapters(outlineResp);
+    if(chapters.length<3){
+      for(let i=0;i<6;i++) chapters.push({title:`第${i+1}章`, summary:''});
+    }
+    statusEl.innerText = '生成中：共 ' + chapters.length + ' 章';
+    
+    const chapterContents = [];
+    for(let i=0;i<chapters.length;i++){
+      const chap = chapters[i];
+      statusEl.innerText = `生成第 ${i+1} / ${chapters.length} 章`;
+      const prevContext = chapterContents.join('\n\n').slice(-2500);
+      const perChapterPrompt = `你是一名富有创造力的专业作家。基于故事核心梗（已提供）、以及本章标题，写出一段高度凝练、情感饱满的章文。要求：\n- 叙事视角：第二人称“你”；\n- 字数目标：约 1000 ~ 1400 字；\n- 风格：文学性强、情绪密度高、节奏张弛；\n- 仅输出章节正文（无需章节名）。\n已选梗概：\n${chosenText}\n\n本章标题：${chap.title}\n本章概要：${chap.summary}\n\n前文摘要（可选）：\n${prevContext}`;
+      const payloadChap = {
+        model: modelSelect.value,
+        messages: [{role:'system', content:'You are an expert fiction writer.'},{role:'user', content: perChapterPrompt}],
+        max_tokens: 2000,
+        temperature: 0.85
+      };
+      
+      const chapResp = await callApi(payloadChap);
+      chapterContents.push(chapResp);
+      await new Promise(r=>setTimeout(r, 600));
+    }
+    
+    statusEl.innerText = '完成：正在拼接结果';
+    const finalText = chapterContents.join('\n\n');
+    finalGeneratedStory = finalText;
+    
+    _appendSystem('已完成生成，长度约：' + finalText.length + ' 字符。可点击“导出为 Word”按钮。');
+    
+    const displayEl = document.createElement('div');
+    displayEl.className = 'message';
+    displayEl.innerHTML = `<div class="avatar">A</div><div class="msg-bubble system">${escapeHtml(finalText.slice(0,3173))}${finalText.length>3173?'...（已截断显示，完整内容请导出）':''}</div>`;
+    chatWindow.appendChild(displayEl);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+    
+    statusEl.innerText = '就绪：生成完成';
+  }catch(e){
+    console.error(e);
+    alert('生成短篇出错：' + e.message);
+    _appendSystem('生成失败：' + e.message);
+    statusEl.innerText = '错误';
+  }
+});
+
+/* ------------------ 辅助函数 ------------------ */
+function _splitIntoVariants(text){
+  if(!text) return [];
+  const separator = "---VARIANT-SEPARATOR---";
+  if (text.includes(separator)) {
+      return text.split(separator).map(s => s.trim()).filter(Boolean);
+  }
+  const arr = text.split(/(?=【核心梗概】)/).map(s=>s.trim()).filter(Boolean);
+  if(arr.length > 1) return arr;
+  return [text];
+}
+
+function _renderVariants(){
+  variantsEl.innerHTML = '';
+  variants.forEach((v, idx)=>{
+    const card = document.createElement('div');
+    card.className = 'variant-card';
+    card.innerHTML = `<div style="font-weight:700">版本 ${idx+1}</div><div style="font-size:13px;color:var(--muted);margin-top:6px;white-space:pre-wrap;">${escapeHtml(v.slice(0,600))}${v.length>600?'...':''}</div><div style="margin-top:auto;display:flex;gap:8px"><button class="btn ghost" onclick="selectVariant(${idx})">选择</button><button class="copy-btn" onclick="copyVariant(${idx})">复制</button></div>`;
+    variantsEl.appendChild(card);
+  });
+}
+
+function selectVariant(i){
+  chosenIndex = i;
+  [...variantsEl.children].forEach((c,idx)=> c.classList.toggle('selected', idx===i));
+  _appendSystem('已选择版本 ' + (i+1));
+}
+
+function copyVariant(i){
+  if(!variants[i]) return;
+  navigator.clipboard.writeText(variants[i]).then(()=> _appendSystem('已复制版本 ' + (i+1) + ' 到剪贴板'));
+}
+
+function _parseChapters(outlineText){
+  const lines = outlineText.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  let ch = [];
+  for(const ln of lines){
+    const m = ln.match(/^\s*(?:第?\s*\d+章|[0-9]+\.|Chapter\s*\d+|第\s*\d+\s*章)?\s*[:：]?\s*(.+?)\s*[-—–]\s*(.+)$/i);
+    if(m){
+      ch.push({title: m[1].trim(), summary: m[2].trim()});
+    } else {
+      const m2 = ln.match(/^\s*(?:\d+)[\.\)]\s*(.+?)(?:：|\s+-\s+)(.+)$/);
+      if(m2) ch.push({title:m2[1].trim(), summary:m2[2].trim()});
+      else if(ln.length<50 && ln.length > 2) ch.push({title:ln, summary:''});
+    }
+  }
+  return ch;
+}
+
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  const contentToExport = finalGeneratedStory || originalText;
+  if (!contentToExport) {
+    alert('没有可导出的内容。请先上传原文或生成故事。');
+    return;
+  }
+  if (typeof docx === 'undefined') {
+      alert('导出功能库加载失败，请刷新页面重试。');
+      return;
+  }
+  _appendSystem('正在生成 Word 文档...');
+  const { Document, Packer, Paragraph, TextRun } = docx;
+  const paragraphs = contentToExport.split('\n').map(pText => new Paragraph({ children: [new TextRun(pText)], spacing: { after: 200 } }));
+  const doc = new Document({ sections: [{ children: paragraphs }] });
+  Packer.toBlob(doc).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = finalGeneratedStory ? "改编小说.docx" : "原文导出.docx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    _appendSystem('Word 文档已导出。');
+  }).catch(err => { console.error("导出失败:", err); _appendSystem('导出失败：' + err.message); });
+});
+
+/* ------------------ 其他控制 ------------------ */
+btnToggleChunk.addEventListener('click', ()=>{ useChunk = !useChunk; btnToggleChunk.innerText = useChunk ? '分段模式：ON' : '分段模式：OFF'; });
+btnPreviewPrompt.addEventListener('click', ()=>{ alert('当前架构的核心Prompt建议存放在后端以保安全。') });
+document.getElementById('btnSaveLocal').addEventListener('click', ()=>{ localStorage.setItem('ip_adapt_demo', JSON.stringify({ rawText: rawText.value, variants, chosenIndex })); _appendSystem('已保存草稿到本地'); });
+document.getElementById('btnLoadLocal').addEventListener('click', ()=>{ const t = localStorage.getItem('ip_adapt_demo'); if(!t){ _appendSystem('未找到本地草稿'); return; } const data = JSON.parse(t); rawText.value = data.rawText || ''; originalText = rawText.value; variants = data.variants || []; chosenIndex = data.chosenIndex || -1; _renderVariants(); _appendSystem('已加载本地草稿'); });
+document.getElementById('btnClearAll').addEventListener('click', ()=>{ if(!confirm('确认清空所有内容？')) return; rawText.value=''; originalText=''; variants=[]; chosenIndex=-1; finalGeneratedStory=''; variantsEl.innerHTML=''; chatWindow.innerHTML='';_appendSystem('已清空页面'); });
+
+</script>
+</body>
+</html>
