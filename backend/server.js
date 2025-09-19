@@ -5,7 +5,14 @@ const cors = require('cors');
 const app = express();
 const PORT = 3173;
 
-app.use(cors());
+// --- START: 修改部分 ---
+// 配置 CORS 选项，明确指定允许的前端地址
+const corsOptions = {
+    origin: 'https://xiaoshuo-1.onrender.com'
+  };
+  
+  app.use(cors(corsOptions));
+  // --- END: 修改部分 ---
 app.use(express.json());
 
 const ALIYUN_API_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
