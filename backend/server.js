@@ -37,7 +37,16 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 const ALIYUN_API_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
-
+// --- START: 新增代码 ---
+// 添加一个根路由用于响应 Render 的健康检查
+app.get('/', (req, res) => {
+    res.status(200).send('Health check OK');
+  });
+  // --- END: 新增代码 ---
+  
+  app.post('/api/generate', async (req, res) => {
+      // ... 您原来的 POST 路由代码保持不变
+  });
 app.post('/api/generate', async (req, res) => {
   const { apiKey, ...payload } = req.body;
 
