@@ -24,13 +24,11 @@ const corsOptions = {
   methods: ['POST', 'OPTIONS'],
   // 明确允许的请求头
   allowedHeaders: ['Content-Type', 'Authorization'],
+  // 允许凭据
+  credentials: true,
   // 为预检请求（OPTIONS）返回一个成功的状态码
   optionsSuccessStatus: 200
 };
-
-// 2. 全局应用这个更详细的 CORS 配置
-// 这将为我们所有的路由正确地处理 OPTIONS 预检请求
-app.use(cors(corsOptions));
 
 // --- END: 更健壮的 CORS 配置 ---
 
@@ -43,10 +41,12 @@ app.get('/', (req, res) => {
     res.status(200).send('Health check OK');
   });
   // --- END: 新增代码 ---
-  
-  app.post('/api/generate', async (req, res) => {
-      // ... 您原来的 POST 路由代码保持不变
-  });
+
+// Handle OPTIONS preflight requests explicitly
+app.options('/api/generate', cors(corsOptions), (req, res) => {
+  res.status(200).send();
+});
+
 app.post('/api/generate', async (req, res) => {
   const { apiKey, ...payload } = req.body;
 
